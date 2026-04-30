@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and fill in real values. NEVER commit terraform.tfvars.
+aws_region   = "us-east-1"
+vpc_id       = "vpc-xxxxxxxxxxxxxxxxx"
+subnet_id    = "subnet-xxxxxxxxxxxxxxxxx"
+ami          = "ami-xxxxxxxxxxxxxxxxx"   # Amazon Linux 2023 in us-east-1
+my_ip_cidr   = "x.x.x.x/32"             # your current public IP
