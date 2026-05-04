@@ -21,10 +21,10 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         width  = 24
         height = 6
         properties = {
-          title   = "Bot Logs"
-          region  = "us-east-1"
-          view    = "table"
-          query   = "SOURCE '${aws_cloudwatch_log_group.bot.name}' | fields @timestamp, level, msg | sort @timestamp desc | limit 50"
+          title  = "Bot Logs"
+          region = "us-east-1"
+          view   = "table"
+          query  = "SOURCE '${aws_cloudwatch_log_group.bot.name}' | fields @timestamp, level, msg | sort @timestamp desc | limit 50"
         }
       },
       {
@@ -34,10 +34,10 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         width  = 24
         height = 4
         properties = {
-          title   = "Errors"
-          region  = "us-east-1"
-          view    = "table"
-          query   = "SOURCE '${aws_cloudwatch_log_group.errors.name}' | fields @timestamp, msg | sort @timestamp desc | limit 20"
+          title  = "Errors"
+          region = "us-east-1"
+          view   = "table"
+          query  = "SOURCE '${aws_cloudwatch_log_group.errors.name}' | fields @timestamp, msg | sort @timestamp desc | limit 20"
         }
       },
       {
