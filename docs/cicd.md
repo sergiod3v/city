@@ -1,57 +1,31 @@
 # CI/CD — GitHub Actions Terraform
 
-Workflow file: `.github/workflows/terraform-staging.yml`
-
----
+Workflow: `.github/workflows/terraform-staging.yml`
 
 ## Triggers
 
 | Event | What runs | Condition |
 |-------|-----------|-----------|
-| Pull request to `master` | `terraform plan` → posts result as PR comment | Only if `environments/trading/staging/**` changed |
-| Push to `master` | `terraform plan` then `terraform apply` | Only if `environments/trading/staging/**` changed |
-| `workflow_dispatch` (manual) | `plan` or `apply` based on input | No path filter — always runs |
+| PR to master | `terraform plan` → PR comment | `environments/trading/staging/**` changed |
+| Push to master | `terraform plan` then `terraform apply` | `environments/trading/staging/**` changed |
+| `workflow_dispatch` | plan or apply (your choice) | Always runs |
 
-The path filter means: changing only docs or the workflow file itself does **not** trigger a plan or apply. Only real infra changes do.
+## Steps
 
----
-
-## Steps (per run)
-
-1. Checkout repo
-2. Assume `behemoth-github-actions-terraform` IAM role via OIDC (15-min credentials, no stored keys)
+1. Checkout
+2. Assume `behemoth-github-actions-terraform` via OIDC (15-min credentials)
 3. Setup Terraform 1.6.x
-4. `terraform fmt -check` — fails fast if formatting is off
-5. `terraform init` — connects to S3 backend
-6. `terraform validate` — catches HCL errors before planning
-7. `terraform plan -out=tfplan` — always runs
-8. On PR: post plan output as comment on the PR
+4. `terraform fmt -check`
+5. `terraform init` → S3 backend
+6. `terraform validate`
+7. `terraform plan -out=tfplan`
+8. On PR: post plan as comment
 9. On push to master / manual apply: `terraform apply -auto-approve tfplan`
 
----
+Job timeout: 30 minutes.
 
-## Auth Flow (OIDC)
+## Manual trigger
 
-```
-GitHub Actions job starts
-  → GitHub issues OIDC JWT for repo:sergiod3v/city
-  → aws-actions/configure-aws-credentials exchanges JWT for temp IAM credentials
-  → Credentials scoped to role behemoth-github-actions-terraform (15 min)
-  → Terraform runs with those credentials
-  → Credentials expire after job
-```
-
-No AWS access keys stored anywhere in GitHub. The role ARN is stored as secret `AWS_ROLE_ARN`.
-
----
-
-## Manual Trigger (workflow_dispatch)
-
-From GitHub UI:
-1. github.com/sergiod3v/city → Actions → "Terraform — Trading Staging"
-2. "Run workflow" → choose `plan` or `apply` → Run
-
-From CLI:
 ```bash
 # Plan only
 gh workflow run "Terraform — Trading Staging" --repo sergiod3v/city --field action=plan
@@ -59,44 +33,40 @@ gh workflow run "Terraform — Trading Staging" --repo sergiod3v/city --field ac
 # Apply
 gh workflow run "Terraform — Trading Staging" --repo sergiod3v/city --field action=apply
 
-# Watch run
+# Watch
 gh run list --repo sergiod3v/city --limit 5
 gh run watch <run-id> --repo sergiod3v/city
 ```
 
----
-
-## Normal Workflow for Infra Changes
+## Git workflow (hard rule)
 
 ```
-1. Create branch: git checkout -b infra/change-description
-2. Edit Terraform files in environments/trading/staging/
-3. Push branch, open PR
-4. GitHub Actions auto-runs plan, posts output as PR comment
-5. Review plan in PR comment
-6. Merge PR → apply runs automatically
-7. Check Actions tab for apply output (EIP, RDS endpoint, etc.)
+git checkout -b infra/your-change
+# make changes
+terraform plan   # verify locally first
+git push
+gh pr create
+# review plan comment on PR
+# merge → apply runs automatically
 ```
 
----
+Never push infra changes directly to master.
 
-## Terraform State
+## Variables injected by workflow
 
-- Backend: S3 `eccensia-tfstate-trading-staging`
-- Key: `trading/staging/terraform.tfstate`
-- Each apply writes updated state back to S3
-- State is the source of truth — never edit manually
+| Env var | Value | Source |
+|---------|-------|--------|
+| `TF_VAR_env` | `staging` | Hardcoded in workflow |
+| `TF_VAR_project` | `auto-trading` | Hardcoded in workflow |
+| `TF_VAR_client` | `myself` | Hardcoded in workflow |
+| `TF_VAR_ssh_public_key` | Key content | Secret `SSH_PUBLIC_KEY` |
+| `TF_VAR_your_ip_cidr` | Your IP | Secret `MY_IP_CIDR` |
 
----
-
-## If the workflow fails
-
-Common causes:
+## Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `fmt check failed` | Run `terraform fmt -recursive` locally, push |
-| `validate failed` | Fix HCL syntax, push |
-| `Error: No valid credential sources` | OIDC provider or role trust policy issue — check IAM |
-| `Error acquiring state lock` | No lock (no DynamoDB). If state is corrupted: download from S3, inspect, re-upload. |
-| `UnauthorizedOperation` | IAM role missing a permission — check CloudTrail for the denied action |
+| `fmt check failed` | `terraform fmt -recursive` locally, push |
+| `InvalidParameterValue` non-ASCII in description | Replace em dashes with hyphens in .tf files |
+| `No valid credential sources` | Check OIDC provider or role trust policy |
+| Plan shows unexpected destroy | Read plan carefully before merging — never auto-approve surprises |

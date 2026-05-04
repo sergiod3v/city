@@ -1,39 +1,18 @@
 # MCP Servers — Claude Code Config
 
-Configured in `~/.claude/settings.json` (global, all projects).
-These give Claude direct access to GitHub, AWS docs, library docs, and the database.
+Configured in `~/.claude/settings.json` (global).
 
----
+## Servers
 
-## Active Servers
+| Server | Package | Auth | Gives Claude |
+|--------|---------|------|-------------|
+| `github` | `@modelcontextprotocol/server-github` (npm global) | PAT | Read/write PRs, issues, files |
+| `aws-docs` | `awslabs.aws-documentation-mcp-server` (uvx) | None | Inline AWS API reference |
+| `context7` | `@upstash/context7-mcp` (npx -y) | None | Up-to-date library docs (boto3, CCXT, SQLAlchemy) |
+| `postgres` | `@modelcontextprotocol/server-postgres` (npm global) | Connection string | SQL queries against DB |
+| `token-savior-recall` | `token-savior-recall` (uvx) | None | Symbol/function lookup |
 
-### GitHub (`github`)
-- Package: `@modelcontextprotocol/server-github` (installed globally via npm)
-- Auth: PAT stored in `settings.json` as `GITHUB_PERSONAL_ACCESS_TOKEN`
-- Gives Claude: read/write PRs, issues, file contents, comments across sergiod3v repos
-- Use cases: open PRs from Claude, read issue context, comment on PRs
-
-### AWS Documentation (`aws-docs`)
-- Package: `awslabs.aws-documentation-mcp-server` (fetched via `uvx` on demand)
-- Auth: none (public docs)
-- Gives Claude: inline AWS API reference without web searches
-- Use cases: "what's the boto3 signature for ssm get_parameter", CloudFormation resource schemas
-
-### Context7 (`context7`)
-- Package: `@upstash/context7-mcp` (fetched via `npx -y` on demand)
-- Auth: none
-- Gives Claude: up-to-date docs for any npm/PyPI package
-- Use cases: CCXT Pro API, SQLAlchemy 2.0 patterns, pandas-ta functions
-
-### PostgreSQL (`postgres`)
-- Package: `@modelcontextprotocol/server-postgres` (installed globally via npm)
-- Auth: RDS connection string in args (fill after terraform apply)
-- Gives Claude: run SQL queries against behemoth RDS directly from chat
-- Use cases: inspect candle_log rows, check cycles, debug indicators
-
----
-
-## Settings Block
+## Settings block
 
 ```json
 "mcpServers": {
@@ -48,16 +27,12 @@ These give Claude direct access to GitHub, AWS docs, library docs, and the datab
   "github": {
     "command": "npx",
     "args": ["@modelcontextprotocol/server-github"],
-    "env": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-pat>"
-    }
+    "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-pat>" }
   },
   "aws-docs": {
     "command": "uvx",
     "args": ["awslabs.aws-documentation-mcp-server@latest"],
-    "env": {
-      "FASTMCP_LOG_LEVEL": "ERROR"
-    }
+    "env": { "FASTMCP_LOG_LEVEL": "ERROR" }
   },
   "context7": {
     "command": "npx",
@@ -65,39 +40,18 @@ These give Claude direct access to GitHub, AWS docs, library docs, and the datab
   },
   "postgres": {
     "command": "npx",
-    "args": [
-      "@modelcontextprotocol/server-postgres",
-      "postgresql://behemoth_app:<password>@<rds-endpoint>:5432/behemoth"
-    ]
+    "args": ["@modelcontextprotocol/server-postgres", "REPLACE_WITH_CONNECTION_STRING"]
   }
 }
 ```
 
----
-
-## Setup on New Machine
+## New machine install
 
 ```bash
-# Install npm-based servers globally
 npm install -g @modelcontextprotocol/server-github @modelcontextprotocol/server-postgres
-
-# uvx and npx servers are self-fetching — no install needed
-# uvx comes with uv: brew install uv (Mac) / pip install uv (any)
+# uvx and npx servers self-fetch — no install needed
+# uv: brew install uv (Mac)
 ```
 
-Then copy the `mcpServers` block above into `~/.claude/settings.json` and fill:
-- `<your-pat>` — GitHub PAT with repo + PR + issues scopes for sergiod3v
-- `<password>` — fetch from SSM: `aws ssm get-parameter --name behemoth.staging.db.password --with-decryption --query Parameter.Value --output text --region us-east-1`
-- `<rds-endpoint>` — from `terraform output rds_endpoint` or GitHub Actions apply output
-
----
-
-## Verifying MCP Servers
-
-After starting a new Claude Code session, run `/mcp` to see connected servers.
-Each should show as `connected` with its available tools listed.
-
-If a server shows `failed`:
-- Check `~/.claude/settings.json` for syntax errors
-- Verify the package is installed: `npm list -g @modelcontextprotocol/server-github`
-- Check the PAT / connection string values are filled (not PLACEHOLDER)
+Postgres connection string for staging: not applicable (SQLite, no RDS).
+Add when prod RDS exists: `postgresql://behemoth_app:<password>@<rds-endpoint>:5432/behemoth`
