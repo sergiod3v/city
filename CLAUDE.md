@@ -1,40 +1,47 @@
-# City -- Infrastructure Monorepo
+# City — Infrastructure Monorepo
 
 ## What This Is
-Central Terraform repository for all ECCENSIA infrastructure.
-Every environment Alejo spins up for any project lives here.
-This is the single source of truth for infrastructure state.
+Terraform repo for all ECCENSIA infrastructure. Single source of truth for infra state.
 
 ## Business Lines
-- `environments/trading/` -- Behemoth trading bot infra (EC2, RDS, monitoring)
-- `environments/consulting/` -- AIejo Agency client stacks (ECS Fargate, n8n per client, RDS)
-- `shared/` -- Resources shared across all environments (networking, IAM roles, S3 state buckets)
+- `environments/trading/` — Behemoth trading bot (EC2 + Docker + RDS)
+- `environments/consulting/` — AIejo Agency client stacks (ECS Fargate, n8n per client) — parked
 
 ## Hard Rules
-- Every environment has its own S3 backend for Terraform state. Never use local state.
-- State buckets: `eccensia-tfstate-{environment}` (e.g. eccensia-tfstate-trading-prod)
-- Never commit .tfvars files containing real values. Use .tfvars.example as template.
-- Never commit .terraform/ directories.
-- All secrets go into AWS Secrets Manager, referenced by ARN -- never hardcoded.
-- Tag every resource: Project, Environment, Owner, ManagedBy=terraform
+- Never push infra changes directly to master. Branch → PR → plan passes → merge → apply.
+- Never use local Terraform state. Always S3 backend.
+- Never commit `.tfvars` with real values. `.tfvars.example` only.
+- Never commit `.terraform/` directories.
+- No secrets in code or env vars. Use SSM Parameter Store SecureString.
+- Tag every resource: Project, Environment, Owner, ManagedBy=terraform.
+- Never EKS. ECS Fargate only for containers.
 
-## Stack
-- IaC: Terraform >= 1.6
-- Cloud: AWS (primary)
-- Never use CloudFormation. Never suggest EKS -- use ECS Fargate.
-- Remote state: S3 + DynamoDB lock table
+## Key Decisions (already made, don't revisit)
+- **VPC**: Use default VPC — no custom VPC per environment. Too much overhead for a solo project.
+- **State lock**: S3 only, no DynamoDB — solo dev, single pipeline, no concurrent applies.
+- **Secrets**: SSM Parameter Store SecureString (free) — not Secrets Manager ($0.40/secret/mo).
+- **Instances**: On-demand only — no reserved instances, no upfront commitment.
+- **Encryption**: AWS-managed keys only (aws/ebs, aws/rds, aws/ssm) — cannot be lost or deleted by you.
+- **Deployment**: Docker on EC2. Bot runs as a container pulled from GHCR.
 
-## Module Usage
-All environments consume from `modules/`. Never copy-paste Terraform between environments.
-If you need a new pattern: create a module in `modules/`, then call it.
+## AWS Account
+- Account: `670074751531`
+- Region: `us-east-1`
+- IAM user: `sergio-admin`
+- OIDC role for GitHub Actions: `behemoth-github-actions-terraform`
 
-## AWS Account Strategy
-Single AWS account. Logical separation via:
-- VPCs per business line (trading VPC, consulting VPC)
-- IAM roles with least privilege per service
-- Resource tags for cost allocation
-- S3 state buckets per environment
+## Active Environments
+- `environments/trading/staging/` — active, Terraform written, CI/CD wired
+- Everything else: does not exist yet
 
-## Environments
-- staging: for testing infra changes before prod. Low-cost instances.
-- prod: live infrastructure. Reserved instances where applicable.
+## Costs (no free tier — account is old)
+- EC2 t3.micro: ~$8.50/mo
+- RDS db.t3.micro: ~$15/mo
+- S3 state, SSM, CloudWatch: ~$1/mo
+- **Total staging: ~$25/mo**
+
+## CI/CD
+- Plan: triggered on PR touching `environments/trading/staging/**`
+- Apply: triggered on merge to master or manual workflow_dispatch
+- Auth: OIDC, no stored AWS keys
+- See: `docs/cicd.md`

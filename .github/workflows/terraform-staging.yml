@@ -26,6 +26,7 @@ permissions:
 env:
   TF_DIR: environments/trading/staging
   AWS_REGION: us-east-1
+  TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
 jobs:
   terraform:

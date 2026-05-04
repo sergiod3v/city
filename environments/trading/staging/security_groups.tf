@@ -1,7 +1,7 @@
 resource "aws_security_group" "ec2" {
   name        = "behemoth-staging-ec2"
   description = "Behemoth EC2 - SSH from your IP only"
-  vpc_id      = aws_vpc.trading.id
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     description = "SSH from your IP"
@@ -21,8 +21,8 @@ resource "aws_security_group" "ec2" {
 
 resource "aws_security_group" "rds" {
   name        = "behemoth-staging-rds"
-  description = "RDS - PostgreSQL from EC2 only"
-  vpc_id      = aws_vpc.trading.id
+  description = "RDS - PostgreSQL from EC2 SG only"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     description     = "PostgreSQL from EC2"

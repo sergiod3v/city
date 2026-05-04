@@ -10,8 +10,10 @@ variable "db_username" {
   default     = "behemoth_app"
 }
 
-variable "ssh_public_key_path" {
-  description = "Path to SSH public key to upload as EC2 key pair"
+# Content of ~/.ssh/id_ed25519_alejocc.pub
+# Passed via TF_VAR_ssh_public_key env var in GitHub Actions (secret: SSH_PUBLIC_KEY)
+# Never use file() here — runners don't have the key on disk
+variable "ssh_public_key" {
+  description = "Ed25519 public key content for EC2 access"
   type        = string
-  default     = "~/.ssh/id_ed25519_alejocc.pub"
 }
