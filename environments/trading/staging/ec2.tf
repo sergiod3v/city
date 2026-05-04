@@ -11,21 +11,22 @@ data "aws_ami" "al2023" {
   }
 }
 
-resource "aws_key_pair" "alejocc" {
-  key_name   = "alejocc-ed25519"
+resource "aws_key_pair" "behemoth" {
+  key_name   = "behemoth-${var.env}-key"
   public_key = var.ssh_public_key
+  tags       = { Name = "behemoth-${var.env}-key" }
 }
 
 resource "aws_instance" "behemoth" {
   ami                    = data.aws_ami.al2023.id
   instance_type          = "t3.micro"
   vpc_security_group_ids = [aws_security_group.ec2.id]
-  key_name               = aws_key_pair.alejocc.key_name
+  key_name               = aws_key_pair.behemoth.key_name
   iam_instance_profile   = aws_iam_instance_profile.behemoth.name
 
-  # IMDSv2 required (secure default).
-  # hop_limit=2 so Docker containers on this host can reach instance metadata
-  # and inherit the IAM instance profile (boto3 uses IMDS for credentials).
+  tags = { Name = "behemoth-${var.env}-bot" }
+
+  # IMDSv2 required. hop_limit=2 so Docker containers inherit the IAM instance profile.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -39,18 +40,23 @@ resource "aws_instance" "behemoth" {
     systemctl enable docker
     systemctl start docker
     usermod -aG docker ec2-user
+
+    # SQLite data dir — persists bot DB across container restarts via volume mount
+    mkdir -p /opt/behemoth/data
+    chown ec2-user:ec2-user /opt/behemoth/data
   EOF
 
   root_block_device {
     volume_size = 20
     volume_type = "gp3"
-    # Encrypted with AWS-managed key (aws/ebs).
-    # AWS-managed keys cannot be deleted or disabled by you — no access loss risk.
+    # AWS-managed key (aws/ebs) — cannot be deleted or disabled by you.
     encrypted = true
+    tags      = { Name = "behemoth-${var.env}-root-vol" }
   }
 }
 
 resource "aws_eip" "behemoth" {
   instance = aws_instance.behemoth.id
   domain   = "vpc"
+  tags     = { Name = "behemoth-${var.env}-eip" }
 }

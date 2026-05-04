@@ -9,40 +9,42 @@ data "aws_iam_policy_document" "ec2_assume" {
 }
 
 resource "aws_iam_role" "behemoth" {
-  name               = "behemoth-staging-ec2"
+  name               = "behemoth-${var.env}-ec2"
   assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
+  tags               = { Name = "behemoth-${var.env}-ec2-role" }
 }
 
 data "aws_iam_policy_document" "behemoth_ssm" {
   statement {
-    sid     = "ReadStagingParams"
+    sid     = "ReadEnvParams"
     actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
     resources = [
-      "arn:aws:ssm:us-east-1:670074751531:parameter/behemoth.staging.*",
+      "arn:aws:ssm:us-east-1:670074751531:parameter/behemoth.${var.env}.*",
     ]
   }
   statement {
     sid     = "DecryptSecureStrings"
     actions = ["kms:Decrypt"]
-    # aws/ssm is the AWS-managed key alias — cannot be deleted, no access loss risk
+    # AWS-managed SSM key — cannot be deleted or disabled by you.
     resources = ["arn:aws:kms:us-east-1:670074751531:key/alias/aws/ssm"]
   }
   statement {
     sid     = "CloudWatchLogs"
     actions = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
     resources = [
-      "arn:aws:logs:us-east-1:670074751531:log-group:/behemoth/*",
+      "arn:aws:logs:us-east-1:670074751531:log-group:/behemoth/${var.env}/*",
     ]
   }
 }
 
 resource "aws_iam_role_policy" "behemoth_ssm" {
-  name   = "behemoth-staging-ssm-access"
+  name   = "behemoth-${var.env}-ssm-access"
   role   = aws_iam_role.behemoth.id
   policy = data.aws_iam_policy_document.behemoth_ssm.json
 }
 
 resource "aws_iam_instance_profile" "behemoth" {
-  name = "behemoth-staging-ec2"
+  name = "behemoth-${var.env}-ec2"
   role = aws_iam_role.behemoth.name
+  tags = { Name = "behemoth-${var.env}-instance-profile" }
 }

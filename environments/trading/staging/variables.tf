@@ -1,18 +1,32 @@
+variable "env" {
+  description = "Environment name (staging, prod). Injected via TF_VAR_env in CI."
+  type        = string
+}
+
+variable "project" {
+  description = "Project name for tagging and grouping in AWS."
+  type        = string
+  default     = "auto-trading"
+}
+
+variable "client" {
+  description = "Client identifier. 'myself' for personal use, client ID for agency deployments."
+  type        = string
+  default     = "myself"
+}
+
 variable "your_ip_cidr" {
-  description = "Your home/office IP for SSH access (CIDR, e.g. 1.2.3.4/32). Passed via TF_VAR_your_ip_cidr in GitHub Actions secret MY_IP_CIDR."
+  description = "Your IP for SSH access. Passed via TF_VAR_your_ip_cidr in CI (secret MY_IP_CIDR)."
   type        = string
 }
 
 variable "db_username" {
-  description = "RDS master username"
+  description = "RDS master username. Unused when SQLite is active."
   type        = string
   default     = "behemoth_app"
 }
 
-# Content of ~/.ssh/id_ed25519_alejocc.pub
-# Passed via TF_VAR_ssh_public_key env var in GitHub Actions (secret: SSH_PUBLIC_KEY)
-# Never use file() here — runners don't have the key on disk
 variable "ssh_public_key" {
-  description = "Ed25519 public key content for EC2 access"
+  description = "Ed25519 public key content for EC2 access. Passed via TF_VAR_ssh_public_key in CI."
   type        = string
 }

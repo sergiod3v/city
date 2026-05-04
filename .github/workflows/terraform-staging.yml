@@ -19,20 +19,24 @@ on:
         options: [plan, apply]
 
 permissions:
-  id-token: write    # OIDC token
+  id-token: write
   contents: read
-  pull-requests: write  # post plan comment
+  pull-requests: write
 
 env:
   TF_DIR: environments/trading/staging
   AWS_REGION: us-east-1
   TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
   TF_VAR_your_ip_cidr: ${{ secrets.MY_IP_CIDR }}
+  TF_VAR_env: staging
+  TF_VAR_project: auto-trading
+  TF_VAR_client: myself
 
 jobs:
   terraform:
     name: ${{ github.event_name == 'push' && 'Apply' || 'Plan' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -65,7 +69,7 @@ jobs:
         id: plan
         working-directory: ${{ env.TF_DIR }}
         run: terraform plan -no-color -out=tfplan
-        continue-on-error: true  # post comment even on plan failure
+        continue-on-error: true
 
       - name: Post plan to PR
         if: github.event_name == 'pull_request'
