@@ -22,7 +22,7 @@ AWS Account 670074751531 / us-east-1
 
 | Resource | Inbound | Outbound |
 |----------|---------|----------|
-| EC2 SG | Port 22 from `186.30.138.158/32` only | All |
+| EC2 SG | Port 22 from your IP only (set via `MY_IP_CIDR` GitHub secret) | All |
 | RDS SG | Port 5432 from EC2 SG only | None needed |
 
 No 0.0.0.0/0 anywhere. RDS has no public endpoint. EC2 is the only entry point.
