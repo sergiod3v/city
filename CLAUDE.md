@@ -26,7 +26,7 @@ Terraform repo for all ECCENSIA infrastructure. Single source of truth for infra
 
 ## AWS Account
 - Account: `670074751531`
-- Region: `us-east-1`
+- Region: `eu-west-1`
 - IAM user: `sergio-admin`
 - OIDC role for GitHub Actions: `behemoth-github-actions-terraform`
 
