@@ -18,14 +18,14 @@ data "aws_iam_policy_document" "behemoth_ssm" {
     sid     = "ReadStagingParams"
     actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
     resources = [
-      "arn:aws:ssm:us-east-1:670074751531:parameter/behemoth/staging/*",
       "arn:aws:ssm:us-east-1:670074751531:parameter/behemoth.staging.*",
     ]
   }
   statement {
-    sid       = "DecryptSSMParams"
-    actions   = ["kms:Decrypt"]
-    resources = ["arn:aws:kms:us-east-1:670074751531:key/aws/ssm"]
+    sid     = "DecryptSecureStrings"
+    actions = ["kms:Decrypt"]
+    # aws/ssm is the AWS-managed key alias — cannot be deleted, no access loss risk
+    resources = ["arn:aws:kms:us-east-1:670074751531:key/alias/aws/ssm"]
   }
   statement {
     sid     = "CloudWatchLogs"

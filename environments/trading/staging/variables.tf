@@ -1,7 +1,6 @@
 variable "your_ip_cidr" {
-  description = "Your home/office IP for SSH access (CIDR, e.g. 1.2.3.4/32)"
+  description = "Your home/office IP for SSH access (CIDR, e.g. 1.2.3.4/32). Passed via TF_VAR_your_ip_cidr in GitHub Actions secret MY_IP_CIDR."
   type        = string
-  default     = "186.30.138.158/32"
 }
 
 variable "db_username" {
@@ -10,8 +9,10 @@ variable "db_username" {
   default     = "behemoth_app"
 }
 
-variable "ssh_public_key_path" {
-  description = "Path to SSH public key to upload as EC2 key pair"
+# Content of ~/.ssh/id_ed25519_alejocc.pub
+# Passed via TF_VAR_ssh_public_key env var in GitHub Actions (secret: SSH_PUBLIC_KEY)
+# Never use file() here — runners don't have the key on disk
+variable "ssh_public_key" {
+  description = "Ed25519 public key content for EC2 access"
   type        = string
-  default     = "~/.ssh/id_ed25519_alejocc.pub"
 }

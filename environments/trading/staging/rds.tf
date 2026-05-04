@@ -3,15 +3,8 @@ resource "random_password" "db" {
   special = false
 }
 
-# Store generated password in SSM (overwrites PLACEHOLDER set during bootstrap)
-resource "aws_ssm_parameter" "db_password" {
-  name        = "behemoth.staging.db.password"
-  type        = "SecureString"
-  value       = random_password.db.result
-  overwrite   = true
-  description = "RDS behemoth_app password - managed by Terraform"
-}
-
+# Encrypted with AWS-managed key (aws/rds).
+# AWS-managed keys cannot be deleted or disabled by you — no access loss risk.
 resource "aws_db_instance" "behemoth" {
   identifier        = "behemoth-staging"
   engine            = "postgres"
@@ -35,4 +28,27 @@ resource "aws_db_instance" "behemoth" {
   backup_retention_period = 7
 
   apply_immediately = true
+}
+
+# Store DB connection info in SSM so the bot can self-configure.
+# Bot reads these at startup — no DB_HOST/USER needed as Docker env vars.
+resource "aws_ssm_parameter" "db_password" {
+  name      = "behemoth.staging.db.password"
+  type      = "SecureString"
+  value     = random_password.db.result
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "db_host" {
+  name      = "behemoth.staging.db.host"
+  type      = "String"
+  value     = aws_db_instance.behemoth.address
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "db_user" {
+  name      = "behemoth.staging.db.user"
+  type      = "String"
+  value     = var.db_username
+  overwrite = true
 }
