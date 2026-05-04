@@ -1,6 +1,6 @@
 resource "aws_security_group" "ec2" {
   name        = "behemoth-${var.env}-ec2"
-  description = "Behemoth ${var.env} EC2 - SSH open, key-auth only"
+  description = "Behemoth ${var.env} EC2 - SSH from operator IP only"
   vpc_id      = data.aws_vpc.default.id
 
   tags = { Name = "behemoth-${var.env}-ec2-sg" }
