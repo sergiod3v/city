@@ -1,10 +1,12 @@
 resource "aws_security_group" "ec2" {
-  name        = "behemoth-staging-ec2"
-  description = "Behemoth EC2 - SSH from your IP only"
+  name        = "behemoth-${var.env}-ec2"
+  description = "Behemoth ${var.env} EC2 — SSH from operator IP only"
   vpc_id      = data.aws_vpc.default.id
 
+  tags = { Name = "behemoth-${var.env}-ec2-sg" }
+
   ingress {
-    description = "SSH from your IP"
+    description = "SSH from operator IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -16,19 +18,5 @@ resource "aws_security_group" "ec2" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "rds" {
-  name        = "behemoth-staging-rds"
-  description = "RDS - PostgreSQL from EC2 SG only"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    description     = "PostgreSQL from EC2"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2.id]
   }
 }

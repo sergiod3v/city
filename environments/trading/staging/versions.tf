@@ -12,10 +12,10 @@ provider "aws" {
   region = "us-east-1"
   default_tags {
     tags = {
-      Project     = "behemoth"
-      Environment = "staging"
-      Owner       = "alejocc"
-      ManagedBy   = "terraform"
+      project    = var.project
+      env        = var.env
+      client     = var.client
+      managed_by = "terraform"
     }
   }
 }
