@@ -25,7 +25,7 @@ permissions:
 
 env:
   TF_DIR: environments/trading/staging
-  AWS_REGION: us-east-1
+  AWS_REGION: eu-west-1
   TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
   TF_VAR_your_ip_cidr: ${{ secrets.MY_IP_CIDR }}
   TF_VAR_env: staging
