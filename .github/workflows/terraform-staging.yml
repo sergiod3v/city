@@ -9,6 +9,14 @@ on:
     branches: [master]
     paths:
       - "environments/trading/staging/**"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "plan or apply"
+        required: true
+        default: "plan"
+        type: choice
+        options: [plan, apply]
 
 permissions:
   id-token: write    # OIDC token
@@ -79,6 +87,8 @@ jobs:
         run: exit 1
 
       - name: Terraform apply
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
         working-directory: ${{ env.TF_DIR }}
         run: terraform apply -auto-approve tfplan
