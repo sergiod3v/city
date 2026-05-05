@@ -15,8 +15,8 @@ import sys
 import time
 import boto3
 
-REGION = "us-east-1"
-EC2_HOURLY_COST = 0.0116  # t3.micro on-demand us-east-1
+REGION = "eu-west-1"
+EC2_HOURLY_COST = 0.0116  # t3.micro on-demand eu-west-1
 
 
 def ec2_client():
