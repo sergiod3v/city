@@ -22,7 +22,7 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         height = 6
         properties = {
           title  = "Bot Logs"
-          region = "us-east-1"
+          region = data.aws_region.current.name
           view   = "table"
           query  = "SOURCE '${aws_cloudwatch_log_group.bot.name}' | fields @timestamp, level, msg | sort @timestamp desc | limit 50"
         }
@@ -35,7 +35,7 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         height = 4
         properties = {
           title  = "Errors"
-          region = "us-east-1"
+          region = data.aws_region.current.name
           view   = "table"
           query  = "SOURCE '${aws_cloudwatch_log_group.errors.name}' | fields @timestamp, msg | sort @timestamp desc | limit 20"
         }
@@ -48,7 +48,7 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         height = 4
         properties = {
           title   = "Candles Fetched"
-          region  = "us-east-1"
+          region  = data.aws_region.current.name
           period  = 300
           stat    = "Sum"
           metrics = [["Behemoth/${title(var.env)}", "CandlesFetched", "symbol", "BTC/USDT"]]
@@ -62,7 +62,7 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         height = 4
         properties = {
           title   = "API Errors"
-          region  = "us-east-1"
+          region  = data.aws_region.current.name
           period  = 300
           stat    = "Sum"
           metrics = [["Behemoth/${title(var.env)}", "APIErrors", "symbol", "BTC/USDT"]]
@@ -76,7 +76,7 @@ resource "aws_cloudwatch_dashboard" "behemoth" {
         height = 4
         properties = {
           title   = "Fetch Latency (ms)"
-          region  = "us-east-1"
+          region  = data.aws_region.current.name
           period  = 300
           stat    = "Average"
           metrics = [["Behemoth/${title(var.env)}", "FetchLatencyMs", "symbol", "BTC/USDT"]]
