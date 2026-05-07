@@ -39,11 +39,6 @@ data "aws_iam_policy_document" "behemoth_ssm" {
       "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/behemoth/${var.env}/*:log-stream:*",
     ]
   }
-  statement {
-    sid       = "CloudWatchMetrics"
-    actions   = ["cloudwatch:PutMetricData"]
-    resources = ["*"]
-  }
 }
 
 resource "aws_iam_role_policy" "behemoth_ssm" {

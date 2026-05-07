@@ -1,87 +1,100 @@
-resource "aws_cloudwatch_log_group" "bot" {
-  name              = "/behemoth/${var.env}/bot"
-  retention_in_days = 30
-  tags              = { Name = "behemoth-${var.env}-bot-logs" }
+locals {
+  # Add one entry per asset to onboard: "SYMBOL" = "asset_type"
+  # e.g. "ETH-USDT" = "crypto"
+  assets = {
+    "BTC-USDT" = "crypto"
+  }
+
+  layers = ["L1-data", "L2-indicators", "L3-regime", "L4-execution", "L5-pnl"]
+
+  # Unique asset types for the group-level error log groups
+  asset_types = distinct(values(local.assets))
+
+  # Flattened brain log group definitions
+  brain_groups = {
+    for item in flatten([
+      for asset, asset_type in local.assets : [
+        for layer in local.layers : {
+          key        = "${asset_type}/${asset}/brain/${layer}"
+          path       = "/behemoth/${var.env}/${asset_type}/${asset}/brain/${layer}"
+          asset      = asset
+          asset_type = asset_type
+          layer      = layer
+        }
+      ]
+    ]) : item.key => item
+  }
+
+  # Flattened layer-level error log group definitions
+  layer_error_groups = {
+    for item in flatten([
+      for asset, asset_type in local.assets : [
+        for layer in local.layers : {
+          key        = "${asset_type}/${asset}/errors/${layer}"
+          path       = "/behemoth/${var.env}/${asset_type}/${asset}/errors/${layer}"
+          asset      = asset
+          asset_type = asset_type
+          layer      = layer
+        }
+      ]
+    ]) : item.key => item
+  }
 }
 
-resource "aws_cloudwatch_log_group" "errors" {
+# Global brain error log group — infra-level errors, startup failures, cross-cutting
+resource "aws_cloudwatch_log_group" "global_errors" {
   name              = "/behemoth/${var.env}/errors"
   retention_in_days = 30
-  tags              = { Name = "behemoth-${var.env}-error-logs" }
+  tags = {
+    Name        = "behemoth-${var.env}-global-errors"
+    Environment = var.env
+    ManagedBy   = "terraform"
+    Project     = var.project
+  }
 }
 
-resource "aws_cloudwatch_dashboard" "behemoth" {
-  dashboard_name = "behemoth-${var.env}"
-  dashboard_body = jsonencode({
-    widgets = [
-      {
-        type   = "log"
-        x      = 0
-        y      = 0
-        width  = 24
-        height = 6
-        properties = {
-          title  = "Bot Logs"
-          region = data.aws_region.current.name
-          view   = "table"
-          query  = "SOURCE '${aws_cloudwatch_log_group.bot.name}' | fields @timestamp, level, msg | sort @timestamp desc | limit 50"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 6
-        width  = 24
-        height = 4
-        properties = {
-          title  = "Errors"
-          region = data.aws_region.current.name
-          view   = "table"
-          query  = "SOURCE '${aws_cloudwatch_log_group.errors.name}' | fields @timestamp, msg | sort @timestamp desc | limit 20"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 10
-        width  = 8
-        height = 4
-        properties = {
-          title   = "Candles Fetched"
-          region  = data.aws_region.current.name
-          period  = 300
-          stat    = "Sum"
-          metrics = [["Behemoth/${title(var.env)}", "CandlesFetched", "symbol", "BTC/USDT"]]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 8
-        y      = 10
-        width  = 8
-        height = 4
-        properties = {
-          title   = "API Errors"
-          region  = data.aws_region.current.name
-          period  = 300
-          stat    = "Sum"
-          metrics = [["Behemoth/${title(var.env)}", "APIErrors", "symbol", "BTC/USDT"]]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 16
-        y      = 10
-        width  = 8
-        height = 4
-        properties = {
-          title   = "Fetch Latency (ms)"
-          region  = data.aws_region.current.name
-          period  = 300
-          stat    = "Average"
-          metrics = [["Behemoth/${title(var.env)}", "FetchLatencyMs", "symbol", "BTC/USDT"]]
-        }
-      }
-    ]
-  })
+# Asset-type error groups — one per asset class (e.g. /behemoth/staging/crypto/errors)
+resource "aws_cloudwatch_log_group" "asset_type_errors" {
+  for_each          = toset(local.asset_types)
+  name              = "/behemoth/${var.env}/${each.key}/errors"
+  retention_in_days = 30
+  tags = {
+    Name        = "behemoth-${var.env}-${each.key}-errors"
+    AssetType   = each.key
+    Environment = var.env
+    ManagedBy   = "terraform"
+    Project     = var.project
+  }
+}
+
+# Brain log groups — operational INFO+ logs per asset per layer
+resource "aws_cloudwatch_log_group" "brain" {
+  for_each          = local.brain_groups
+  name              = each.value.path
+  retention_in_days = 30
+  tags = {
+    Name        = "behemoth-${var.env}-${each.value.asset}-${each.value.layer}-brain"
+    Symbol      = each.value.asset
+    AssetType   = each.value.asset_type
+    Layer       = each.value.layer
+    Environment = var.env
+    ManagedBy   = "terraform"
+    Project     = var.project
+  }
+}
+
+# Layer error groups — ERROR+ logs isolated per asset per layer
+resource "aws_cloudwatch_log_group" "layer_errors" {
+  for_each          = local.layer_error_groups
+  name              = each.value.path
+  retention_in_days = 30
+  tags = {
+    Name        = "behemoth-${var.env}-${each.value.asset}-${each.value.layer}-errors"
+    Symbol      = each.value.asset
+    AssetType   = each.value.asset_type
+    Layer       = each.value.layer
+    Environment = var.env
+    ManagedBy   = "terraform"
+    Project     = var.project
+  }
 }
