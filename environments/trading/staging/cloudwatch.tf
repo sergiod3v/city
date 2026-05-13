@@ -5,7 +5,7 @@ locals {
     "BTC-USDT" = "crypto"
   }
 
-  layers = ["L1-data", "L2-indicators", "L3-regime", "L4-execution", "L5-pnl"]
+  layers = ["L1-data", "L2-indicators", "L2-qualitative", "L3-regime", "L3-conviction", "L4-execution", "L5-pnl"]
 
   # Unique asset types for the group-level error log groups
   asset_types = distinct(values(local.assets))
