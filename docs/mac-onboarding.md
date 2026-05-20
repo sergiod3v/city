@@ -102,8 +102,8 @@ alias behemoth-restart="svc-restart behemoth"
 alias behemoth-logs="svc-logs behemoth"
 alias eccensia-restart="svc-restart eccensia"
 alias eccensia-logs="svc-logs eccensia"
-alias mercadillo-restart='ssh bijadillo "cd /opt/eccensia && docker compose restart mercadillo-front"'
-alias mercadillo-logs='ssh bijadillo "cd /opt/eccensia && docker compose logs --tail 50 -f mercadillo-front"'
+alias mercadillo-restart="svc-restart mercadillo-bijadillo"
+alias mercadillo-logs="svc-logs mercadillo-bijadillo"
 alias nginx-restart="svc-restart nginx"
 alias nginx-logs="svc-logs nginx"
 ```
