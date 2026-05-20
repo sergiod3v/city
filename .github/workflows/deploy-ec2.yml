@@ -1,0 +1,100 @@
+name: Deploy to EC2 (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Full GHCR image reference (e.g. ghcr.io/sergiod3v/auto-trading:abc1234)"
+        required: true
+        type: string
+      service:
+        description: "Docker Compose service name to redeploy"
+        required: true
+        type: string
+    secrets:
+      GHCR_TOKEN:
+        required: true
+      CALLER_AWS_ACCESS_KEY_ID:
+        required: true
+      CALLER_AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service }} to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.CALLER_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.CALLER_AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Ensure EC2 is running
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:project,Values=auto-trading" \
+              "Name=tag:env,Values=staging" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text --region eu-west-1)
+          STATE=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query "Reservations[0].Instances[0].State.Name" \
+            --output text --region eu-west-1)
+          echo "EC2 ${INSTANCE_ID} — state: ${STATE}"
+          if [ "$STATE" != "running" ]; then
+            aws ec2 start-instances --instance-ids "$INSTANCE_ID" --region eu-west-1
+            aws ec2 wait instance-running --instance-ids "$INSTANCE_ID" --region eu-west-1
+          fi
+
+      - name: Open SSH on security group
+        id: open-sg
+        run: |
+          RUNNER_IP=$(curl -sf https://api.ipify.org)
+          echo "runner_ip=${RUNNER_IP}" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ secrets.EC2_SG_ID }}" \
+            --protocol tcp --port 22 \
+            --cidr "${RUNNER_IP}/32"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          IMAGE: ${{ inputs.image }}
+          SERVICE: ${{ inputs.service }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GHCR_TOKEN,IMAGE,SERVICE
+          script: |
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u sergiod3v --password-stdin
+            cd /opt/eccensia
+            docker compose pull "$SERVICE"
+            docker compose up -d "$SERVICE"
+            docker logout ghcr.io
+            docker image prune -f
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sleep 10
+            docker ps | grep "${{ inputs.service }}"
+            docker logs "${{ inputs.service }}" --tail 20
+
+      - name: Close SSH on security group
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ secrets.EC2_SG_ID }}" \
+            --protocol tcp --port 22 \
+            --cidr "${{ steps.open-sg.outputs.runner_ip }}/32"
