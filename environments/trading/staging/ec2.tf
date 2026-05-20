@@ -58,7 +58,7 @@ resource "aws_instance" "behemoth" {
   EOF
 
   root_block_device {
-    volume_size = 20
+    volume_size = 30
     volume_type = "gp3"
     # AWS-managed key (aws/ebs) — cannot be deleted or disabled by you.
     encrypted = true
