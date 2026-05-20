@@ -1,0 +1,88 @@
+# ECCENSIA unified stack — all services on single EC2
+# Location on EC2: /opt/eccensia/docker-compose.yml
+
+networks:
+  net_proxy:
+  net_mercadillo:
+  net_behemoth:
+
+volumes:
+  postgres_data:
+  behemoth_data:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/letsencrypt:ro
+      - ./nginx/webroot:/var/www/certbot:ro
+    depends_on:
+      - mercadillo-front
+      - eccensia
+    networks: [net_proxy]
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./nginx/certs:/etc/letsencrypt
+      - ./nginx/webroot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks: [net_proxy]
+    restart: unless-stopped
+
+  mercadillo-front:
+    image: ghcr.io/sergiod3v/mercadillo:latest
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - AWS_REGION=eu-west-1
+      - DATABASE_URL=postgresql://mercadillo_app@mercadillo-db:5432/mercadillo
+    depends_on:
+      - mercadillo-db
+    networks: [net_proxy, net_mercadillo]
+    restart: unless-stopped
+
+  mercadillo-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mercadillo
+      POSTGRES_USER: mercadillo_app
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - db_password
+    networks: [net_mercadillo]
+    restart: unless-stopped
+
+  eccensia:
+    image: ghcr.io/sergiod3v/eccensia:latest
+    expose:
+      - "80"
+    networks: [net_proxy]
+    restart: unless-stopped
+
+  behemoth:
+    image: ghcr.io/sergiod3v/auto-trading:latest
+    volumes:
+      - behemoth_data:/app/data
+    environment:
+      - AWS_REGION=eu-west-1
+      - BEHEMOTH_PAPER_MODE=true
+      - BEHEMOTH_MARKET_TYPE=spot
+      - BEHEMOTH_SYMBOLS=BTC/USDT
+      - BEHEMOTH_INTERVAL=1h
+    networks: [net_behemoth]
+    restart: unless-stopped
