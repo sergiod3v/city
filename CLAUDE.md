@@ -5,6 +5,7 @@ Terraform repo for all ECCENSIA infrastructure. Single source of truth for infra
 
 ## Business Lines
 - `environments/trading/` — Behemoth trading bot (EC2 + Docker + RDS)
+- `environments/bijadillo/` — Bijadillo web platform (shared EC2 + Docker Compose + nginx + RDS)
 - `environments/consulting/` — AIejo Agency client stacks (ECS Fargate, n8n per client) — parked
 
 ## Hard Rules
@@ -32,16 +33,18 @@ Terraform repo for all ECCENSIA infrastructure. Single source of truth for infra
 
 ## Active Environments
 - `environments/trading/staging/` — active, Terraform written, CI/CD wired
-- Everything else: does not exist yet
+- `environments/bijadillo/staging/` — scaffolded, not yet applied. Shared EC2 for all Bijadillo products (Mercadillo first). See BOOTSTRAP.md
 
 ## Costs (no free tier — account is old)
-- EC2 t3.micro: ~$8.50/mo
-- RDS db.t3.micro: ~$15/mo
+- Trading EC2 t3.micro: ~$8.50/mo
+- Bijadillo EC2 t3.micro: ~$8.50/mo
+- RDS db.t3.micro (per instance): ~$15/mo
 - S3 state, SSM, CloudWatch: ~$1/mo
-- **Total staging: ~$25/mo**
+- **Total staging (both running, no RDS): ~$18/mo**
+- **Total staging (both running + RDS): ~$33/mo**
 
 ## CI/CD
-- Plan: triggered on PR touching `environments/trading/staging/**`
+- Plan: triggered on PR touching `environments/{trading,bijadillo}/staging/**`
 - Apply: triggered on merge to master or manual workflow_dispatch
 - Auth: OIDC, no stored AWS keys
 - See: `docs/cicd.md`

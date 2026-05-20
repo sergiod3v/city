@@ -44,6 +44,17 @@ resource "aws_instance" "behemoth" {
     # SQLite data dir — persists bot DB across container restarts via volume mount
     mkdir -p /opt/behemoth/data
     chown ec2-user:ec2-user /opt/behemoth/data
+
+    # Docker Compose v2
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+    # Bijadillo dirs — nginx conf, certs, ACME webroot, secrets
+    mkdir -p /opt/bijadillo/nginx/{conf.d,certs,webroot}
+    mkdir -p /opt/bijadillo/secrets
+    chown -R ec2-user:ec2-user /opt/bijadillo
   EOF
 
   root_block_device {

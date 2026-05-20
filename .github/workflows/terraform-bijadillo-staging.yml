@@ -1,0 +1,99 @@
+name: Terraform — Bijadillo Staging
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "environments/bijadillo/staging/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - "environments/bijadillo/staging/**"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "plan or apply"
+        required: true
+        default: "plan"
+        type: choice
+        options: [plan, apply]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_DIR: environments/bijadillo/staging
+  AWS_REGION: eu-west-1
+  TF_VAR_env: staging
+  TF_VAR_project: bijadillo
+  TF_VAR_client: bijadillo
+  TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+
+jobs:
+  terraform:
+    name: ${{ github.event_name == 'push' && 'Apply' || 'Plan' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+
+      - name: Post plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            *Triggered by @${{ github.actor }} on \`${{ github.ref }}\`*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Terraform apply
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve tfplan
