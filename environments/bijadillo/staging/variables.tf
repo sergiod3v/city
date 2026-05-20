@@ -14,14 +14,3 @@ variable "client" {
   type        = string
   default     = "bijadillo"
 }
-
-variable "ssh_public_key" {
-  description = "Ed25519 public key for EC2 SSH access."
-  type        = string
-}
-
-variable "db_username" {
-  description = "RDS master username."
-  type        = string
-  default     = "mercadillo_app"
-}

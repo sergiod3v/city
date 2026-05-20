@@ -23,6 +23,18 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mercadillo
+      POSTGRES_USER: mercadillo_app
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - db_password
+    restart: unless-stopped
+
   mercadillo:
     image: ghcr.io/sergiod3v/mercadillo:latest
     expose:
@@ -32,6 +44,9 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - AWS_REGION=eu-west-1
+      - DATABASE_URL=postgresql://mercadillo_app@postgres:5432/mercadillo
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   # ─── Future products ───
@@ -40,3 +55,10 @@ services:
   #   expose:
   #     - "3001"
   #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt  # created on EC2 at deploy time, never committed
