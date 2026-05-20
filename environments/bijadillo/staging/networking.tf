@@ -22,14 +22,14 @@ data "terraform_remote_state" "trading" {
   }
 }
 
-# Open 80/443 on the trading EC2 SG — nginx handles subdomain routing
+# Open 80/443 on the trading EC2 SG - nginx handles subdomain routing
 resource "aws_security_group_rule" "http_inbound" {
   type              = "ingress"
   from_port         = 80
   to_port           = 80
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
-  description       = "HTTP — ACME challenge + redirect to HTTPS"
+  description       = "HTTP - ACME challenge + redirect to HTTPS"
   security_group_id = data.terraform_remote_state.trading.outputs.ec2_sg_id
 }
 
@@ -39,6 +39,6 @@ resource "aws_security_group_rule" "https_inbound" {
   to_port           = 443
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
-  description       = "HTTPS — nginx TLS termination"
+  description       = "HTTPS - nginx TLS termination"
   security_group_id = data.terraform_remote_state.trading.outputs.ec2_sg_id
 }
