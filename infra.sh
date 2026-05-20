@@ -1,6 +1,6 @@
 #!/bin/bash
 # Complete ECCENSIA infra on/off — controls the single shared EC2.
-# All services collocated: Behemoth bot + Bijadillo (nginx + mercadillo + postgres).
+# All services collocated: behemoth + eccensia SPA + mercadillo + nginx + postgres.
 #
 # Usage:
 #   ./infra.sh up       Start EC2, wait until running, print IP + cost reminder
@@ -65,8 +65,8 @@ cmd_up() {
   echo "  UP  instance=$INSTANCE_ID  ip=$EIP"
   echo ""
   echo "Services:"
-  echo "  Behemoth bot   — starts automatically via systemd/docker run"
-  echo "  Bijadillo stack — cd /opt/bijadillo && docker compose up -d"
+  echo "  Behemoth bot   — starts automatically via docker compose"
+  echo "  Eccensia stack — cd /opt/eccensia && docker compose up -d"
   echo ""
   echo "Cost: ~\$0.012/hr (~\$8.50/mo) while running. Stop when done: ./infra.sh down"
 }
@@ -107,10 +107,11 @@ cmd_status() {
   echo "region    $REGION"
   echo ""
   echo "Services on this EC2:"
-  echo "  Behemoth (trading bot)       /opt/behemoth/"
-  echo "  nginx + certbot              /opt/bijadillo/"
-  echo "  mercadillo (Next.js :3000)   /opt/bijadillo/"
-  echo "  postgres :5432               /opt/bijadillo/"
+  echo "  behemoth   (trading bot)        /opt/eccensia/"
+  echo "  eccensia   (Vite SPA :80)       /opt/eccensia/"
+  echo "  mercadillo (Next.js :3000)      /opt/eccensia/"
+  echo "  mercadillo-db (postgres :5432)  /opt/eccensia/"
+  echo "  nginx + certbot                 /opt/eccensia/"
 }
 
 # ─── Dispatch ─────────────────────────────────────────────────────────────────
