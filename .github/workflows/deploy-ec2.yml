@@ -94,8 +94,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             sleep 10
-            docker ps | grep "${{ inputs.service }}"
-            docker logs "${{ inputs.service }}" --tail 20
+            docker compose -f /opt/eccensia/docker-compose.yml ps "${{ inputs.service }}"
+            docker compose -f /opt/eccensia/docker-compose.yml logs "${{ inputs.service }}" --tail 20
 
       - name: Close SSH on security group
         if: always()
