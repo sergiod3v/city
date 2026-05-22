@@ -18,6 +18,12 @@ on:
         required: true
       CALLER_AWS_SECRET_ACCESS_KEY:
         required: true
+      EC2_SG_ID:
+        required: true
+      EC2_HOST:
+        required: true
+      SSH_PRIVATE_KEY:
+        required: true
 
 jobs:
   deploy:
