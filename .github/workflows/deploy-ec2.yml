@@ -54,7 +54,14 @@ jobs:
       - name: Open SSH on security group
         id: open-sg
         run: |
-          RUNNER_IP=$(curl -sf https://api.ipify.org)
+          RUNNER_IP=$(curl -sf --retry 3 --retry-delay 2 https://api.ipify.org \
+            || curl -sf --retry 3 --retry-delay 2 https://checkip.amazonaws.com \
+            || curl -sf --retry 3 --retry-delay 2 https://ifconfig.me)
+          RUNNER_IP=$(echo "$RUNNER_IP" | tr -d '[:space:]')
+          if [ -z "$RUNNER_IP" ]; then
+            echo "ERROR: could not determine runner IP after retries"
+            exit 1
+          fi
           echo "runner_ip=${RUNNER_IP}" >> "$GITHUB_OUTPUT"
           aws ec2 authorize-security-group-ingress \
             --group-id "${{ secrets.EC2_SG_ID }}" \
@@ -92,7 +99,7 @@ jobs:
             docker logs "${{ inputs.service }}" --tail 20
 
       - name: Close SSH on security group
-        if: always()
+        if: always() && steps.open-sg.outputs.runner_ip != ''
         run: |
           aws ec2 revoke-security-group-ingress \
             --group-id "${{ secrets.EC2_SG_ID }}" \
