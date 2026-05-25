@@ -214,12 +214,16 @@ if ! command -v gh &>/dev/null; then
   sudo apt-get install -y gh
 fi
 
-# ─── Helix (system — needs PPA) ──
-log "helix"
+# ─── Helix (user-local binary from GitHub) ──
+log "helix → ~/.local/bin"
 if ! command -v hx &>/dev/null; then
-  sudo add-apt-repository -y ppa:maveonair/helix-editor
-  sudo apt-get update -y
-  sudo apt-get install -y helix
+  HX_VER=$(curl -s "https://api.github.com/repos/helix-editor/helix/releases/latest" | grep -Po '"tag_name": "\K[^"]*')
+  curl -Lo /tmp/helix.tar.xz "https://github.com/helix-editor/helix/releases/download/${HX_VER}/helix-${HX_VER}-x86_64-linux.tar.xz"
+  tar xf /tmp/helix.tar.xz -C /tmp
+  cp "/tmp/helix-${HX_VER}-x86_64-linux/hx" "$LOCAL_BIN/"
+  mkdir -p ~/.config/helix
+  cp -r "/tmp/helix-${HX_VER}-x86_64-linux/runtime" ~/.config/helix/
+  rm -rf /tmp/helix.tar.xz "/tmp/helix-${HX_VER}-x86_64-linux"
 fi
 
 # ═══════════════════════════════════════════════════════
@@ -282,7 +286,6 @@ alias ....='cd ../../..'
 alias cat='bat --paging=never'
 alias grep='rg'
 alias top='btop'
-alias hx='helix'
 
 [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
 [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh
