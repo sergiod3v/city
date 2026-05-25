@@ -214,24 +214,50 @@ sqlite3 ~/.claude/token-dashboard.db "SELECT date(created_at), sum(input_tokens)
 
 ---
 
-## 8. Status Line (`ctx-status-debug.py`)
+## 8. Status Line / Infoline
 
 Configured in `settings.json`:
 ```json
 "statusLine": {
   "type": "command",
-  "command": "python3 /home/alejo/.claude/ctx-status-debug.py"
+  "command": "python3 /home/alejo/.claude/ctx-status.py"
 }
 ```
 
-Reads JSON from stdin (Claude provides session info), outputs single line. Shows:
-- Model short name (e.g. `Opus4.7`, `Sonnet4.6`, `Haiku4.5`)
-- Context usage `CTX 45%` or `CTX 12K/200K`
-- Pro plan cap: **200K tokens**
+Source script: `claude-config/scripts/ctx-status.py` (synced upstream from Windows `~/.claude/ctx-status.py`).
 
-Token total = `cache_read + cache_creation + input_tokens`.
+### Output format
 
-Debug log: `~/.claude/ctx-debug.log` (every status invocation appends).
+```
+Opus 4.7  CTX 91% █████████░ 183K/200K  5h:58%  7d:13%
+```
+
+Components (space-separated):
+- **Model short name** — `Opus 4.7`, `Sonnet 4.6`, `Haiku 4.5` (strips "Claude " + flavor word)
+- **CTX %** — context window used (rounded int)
+- **Bar** — 10-block bar, `█` filled / `░` empty (each block = 10%)
+- **Tokens** — `<used>K/<size>K` (Pro plan cap: **200K**)
+- **5h:N%** — 5-hour rate limit usage (if present in session)
+- **7d:N%** — 7-day rate limit usage (if present in session)
+
+### Data source
+
+Reads JSON from stdin (Claude provides per-turn session info). Fields used:
+- `context_window.used_percentage`
+- `context_window.context_window_size`
+- `context_window.current_usage.input_tokens`
+- `model.display_name`
+- `rate_limits.five_hour.used_percentage`
+- `rate_limits.seven_day.used_percentage`
+
+Falls back to `CTX --` if stdin parse fails or no usage data.
+
+### Verify after bootstrap
+
+```bash
+echo '{"context_window":{"used_percentage":42,"context_window_size":200000,"current_usage":{"input_tokens":84000}},"model":{"display_name":"Claude Opus 4.7"}}' | python3 ~/.claude/ctx-status.py
+# Expected: Opus 4.7  CTX 42% ████░░░░░░ 84K/200K
+```
 
 ---
 
@@ -403,7 +429,10 @@ Run in order on a fresh Claude session:
   sudo apt-get install -y sqlite3                    # /usage command needs it
   ```
 - [ ] Restart Claude Code session (MCP changes need reload)
-- [ ] `python3 ~/.claude/ctx-status-debug.py` — verify status line script runs (Python 3.10+)
+- [ ] Verify status line script runs:
+  ```bash
+  echo '{"context_window":{"used_percentage":10,"context_window_size":200000,"current_usage":{"input_tokens":20000}},"model":{"display_name":"Claude Opus 4.7"}}' | python3 ~/.claude/ctx-status.py
+  ```
 - [ ] `ls ~/.claude/projects/-home-alejo-workspace/memory/` — expect 6 files (MEMORY.md + 5 seeds)
 - [ ] `ssh -T git@github.com` — expect `Hi sergiod3v!`
 - [ ] `gh auth status` — expect logged in
