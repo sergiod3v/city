@@ -201,6 +201,19 @@ fi
 # ─── btop (system) ──
 sudo apt-get install -y btop 2>/dev/null || skip "btop unavailable"
 
+# ─── gh CLI (system — official apt repo) ──
+log "gh CLI"
+if ! command -v gh &>/dev/null; then
+  sudo mkdir -p -m 755 /etc/apt/keyrings
+  wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+  sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+  sudo apt-get update -y
+  sudo apt-get install -y gh
+fi
+
 # ─── Helix (system — needs PPA) ──
 log "helix"
 if ! command -v hx &>/dev/null; then
@@ -440,6 +453,22 @@ Host github.com
     IdentitiesOnly yes
 EOF
   chmod 600 ~/.ssh/config
+fi
+
+# ─── Auto-register key via gh CLI (if already authed) ───
+log "Try gh auto-register key"
+if gh auth status &>/dev/null; then
+  KEY_TITLE="eccensia-server-$(hostname)"
+  if gh ssh-key list 2>/dev/null | grep -q "$KEY_TITLE"; then
+    skip "key '$KEY_TITLE' already on GitHub"
+  else
+    gh ssh-key add "$GH_KEY.pub" --title "$KEY_TITLE" \
+      && log "Key registered to GitHub as '$KEY_TITLE'" \
+      || warn "gh ssh-key add failed — paste manually"
+  fi
+else
+  warn "gh not authed. Run: gh auth login --git-protocol ssh --web"
+  warn "Then re-run this script to auto-register, OR paste pubkey manually."
 fi
 
 # ═══════════════════════════════════════════════════════
