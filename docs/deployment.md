@@ -1,111 +1,84 @@
 # Deployment Runbook
 
-EC2: `i-083ca0f5a61cf32b8`, EIP `34.251.157.224`, `eu-west-1`
-SSH: `ssh -i ~/.ssh/id_ed25519_alejocc ec2-user@34.251.157.224`
+Host: Hetzner CPX11 (`ssh hetzner`). Deploy path: `/opt/apps/eccensia/`.
 
-## First-Deploy Bootstrap (EC2 already running)
+Source of truth: `city/config/eccensia/` (compose, nginx, `.env.example`).
+
+## First-Deploy Bootstrap
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_alejocc ec2-user@34.251.157.224
+ssh hetzner
 
-# GHCR login (one-time — survives reboots via ~/.docker/config.json)
-docker login ghcr.io -u sergiod3v -p <GITHUB_PAT>
+sudo mkdir -p /opt/apps/eccensia
+sudo chown -R "$USER":"$USER" /opt/apps/eccensia
+git clone git@github.com:sergiod3v/city.git ~/city || (cd ~/city && git pull)
+rsync -a ~/city/config/eccensia/ /opt/apps/eccensia/
 
-# Create secrets dir + DB password (never committed)
-mkdir -p /opt/eccensia/secrets
-echo "your-strong-db-password" > /opt/eccensia/secrets/db_password.txt
-chmod 600 /opt/eccensia/secrets/db_password.txt
+cd /opt/apps/eccensia
+cp .env.example .env
+$EDITOR .env                                              # paste AWS_ACCESS_KEY_ID / SECRET
 
-# Copy compose config from city repo (or clone city and symlink)
-# config/eccensia/ → /opt/eccensia/
-
-# Start all services
-cd /opt/eccensia
+echo "$GHCR_PAT" | docker login ghcr.io -u sergiod3v --password-stdin
+docker compose pull
 docker compose up -d
 docker compose ps
 ```
 
-## SSL Bootstrap (one-time per domain)
-
-HTTP block must be live before issuing. Run after `docker compose up -d`.
-
-```bash
-# Issue certs — repeat for each domain
-docker compose run --rm certbot certonly \
-  --webroot -w /var/www/certbot \
-  -d mercadillo.bijadillo.com \
-  --email sergioa.camachoc@gmail.com --agree-tos --no-eff-email
-
-docker compose run --rm certbot certonly \
-  --webroot -w /var/www/certbot \
-  -d eccensia.com -d www.eccensia.com \
-  --email sergioa.camachoc@gmail.com --agree-tos --no-eff-email
-
-docker compose run --rm certbot certonly \
-  --webroot -w /var/www/certbot \
-  -d eccensia.sergiod3v.cloud \
-  --email sergioa.camachoc@gmail.com --agree-tos --no-eff-email
-
-docker compose run --rm certbot certonly \
-  --webroot -w /var/www/certbot \
-  -d bijadillo.com -d www.bijadillo.com \
-  --email sergioa.camachoc@gmail.com --agree-tos --no-eff-email
-
-# Reload nginx after certs issued
-docker compose exec nginx nginx -s reload
-```
-
-DNS A records required before issuing:
-- `eccensia.com` + `www.eccensia.com` → `34.251.157.224`
-- `eccensia.sergiod3v.cloud` → `34.251.157.224`
-
 ## Per-Service Updates
 
 ```bash
-cd /opt/eccensia
+ssh hetzner
+cd /opt/apps/eccensia
 
-# Pull new image + restart single service
-docker compose pull <service>
-docker compose up -d <service>
-
-# Examples
 docker compose pull behemoth && docker compose up -d behemoth
-docker compose pull mercadillo-front && docker compose up -d mercadillo-front
 docker compose pull eccensia && docker compose up -d eccensia
+docker compose pull nginx    && docker compose up -d nginx
+```
+
+CI builds + pushes `:latest` to GHCR. There is no watchtower / auto-pull — the commands above are the deploy step.
+
+## Config Changes (compose, nginx)
+
+```bash
+# Local
+$EDITOR city/config/eccensia/...
+git commit -m "..." && git push
+
+# Host
+ssh hetzner
+cd ~/city && git pull
+rsync -a ~/city/config/eccensia/ /opt/apps/eccensia/ --exclude .env
+cd /opt/apps/eccensia && docker compose up -d
 ```
 
 ## Rollback
 
 ```bash
-cd /opt/eccensia
-
-# Roll back to previous image (GHCR keeps last 3 tags)
-docker compose pull ghcr.io/sergiod3v/<service>:<previous-sha>
-# Edit docker-compose.yml image tag to pin SHA, then:
-docker compose up -d <service>
+cd /opt/apps/eccensia
+# GHCR keeps SHA-tagged images. Pin the previous SHA in docker-compose.yml:
+#   image: ghcr.io/sergiod3v/<svc>:<short-sha>
+docker compose pull <svc>
+docker compose up -d <svc>
 ```
 
 ## Verification
 
 ```bash
-docker compose ps                          # all services Up
-docker network ls                          # net_proxy, net_mercadillo, net_behemoth present
-curl -I https://mercadillo.bijadillo.com   # 200
-curl -I https://eccensia.com               # 200
-curl -I https://eccensia.sergiod3v.cloud   # 200 (after DNS)
-curl -I https://bijadillo.com              # 503 (stub)
-docker compose logs behemoth --tail 20     # SSM params loaded, trading loop running
-docker compose exec mercadillo-front ping mercadillo-db   # reachable
-docker compose exec behemoth ping mercadillo-front        # should fail (isolated) ✓
+docker compose ps                          # all Up
+docker network ls | grep -E "net_proxy|net_behemoth"
+curl -I http://eccensia.com                # 200 (HTTP only — TLS deferred)
+docker compose logs behemoth --tail 30     # SSM params loaded, trading loop running
 ```
 
-## EC2 Start/Stop
+## TLS (deferred)
 
-```bash
-# From city repo root (Bash required — uses AWS CLI)
-./infra.sh up
-./infra.sh down
-./infra.sh status
-```
+nginx serves HTTP only today. ACME webroot path is reserved in `nginx/conf.d/default.conf`. To enable HTTPS:
 
-EIP `34.251.157.224` is always retained (EIP charge ~$0.005/hr while stopped). Binance API whitelist stays valid.
+1. Add `certbot` service to `docker-compose.yml` (mount `./nginx/certs` + `./nginx/webroot`).
+2. `docker compose run --rm certbot certonly --webroot -w /var/www/certbot -d eccensia.com -d www.eccensia.com --email sergioa.camachoc@gmail.com --agree-tos --no-eff-email`.
+3. Add `listen 443 ssl;` server block referencing `/etc/letsencrypt/live/eccensia.com/`.
+4. `docker compose exec nginx nginx -s reload`.
+
+## AWS Lifecycle
+
+No longer applicable — the EC2 backing Behemoth was destroyed in commit `6924ea1` (`chore(trading): remove all EC2/CW/IAM resources for VPS migration`). Behemoth's AWS surface is now SSM read-only via the IAM user creds in `/opt/apps/eccensia/.env`.

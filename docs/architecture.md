@@ -1,60 +1,48 @@
 # Architecture — Trading Staging
 
+EC2 was destroyed in commit `6924ea1` (trading-teardown). Behemoth now runs on the Hetzner VPS via Docker Compose. AWS surface is now SSM-only.
+
 ## What's Deployed
 
 ```
-AWS / us-east-1 / Default VPC
-└── EC2 t3.micro — behemoth-staging-bot
-    ├── Docker: ghcr.io/sergiod3v/auto-trading:latest
-    ├── SQLite: /opt/behemoth/data/behemoth.db (volume → /app/data inside container)
-    └── EIP (static — whitelisted on Binance API key)
+Hetzner CPX11 (Ubuntu 24.04)
+└── /opt/apps/eccensia/  (docker compose, mirrors city/config/eccensia/)
+    ├── nginx          — reverse proxy (HTTP only)
+    ├── eccensia       — Vite SPA   (ghcr.io/sergiod3v/eccensia:latest)
+    └── behemoth       — bot         (ghcr.io/sergiod3v/auto-trading:latest)
+        ├── volume behemoth_data → /app/data (SQLite)
+        └── reads SSM via AWS creds in /opt/apps/eccensia/.env
 ```
 
-## Security
-
-| Resource | Rule |
-|----------|------|
-| EC2 SG | Port 22 from operator IP only (GitHub secret `MY_IP_CIDR`) |
-| IMDSv2 | Required, hop_limit=2 so Docker container inherits IAM role |
-
-## EC2
-
-- AMI: Amazon Linux 2023 (latest, resolved dynamically — no hardcoded ID)
-- Instance: t3.micro on-demand (~$8.50/mo)
-- User data: installs Docker, creates `/opt/behemoth/data`
-- No PM2, no Python on host — bot runs entirely inside Docker
+See `docs/deployment.md` for the deploy runbook and `docs/services.md` for the service map.
 
 ## Storage
 
-SQLite at `/opt/behemoth/data/behemoth.db` on EC2.
-Docker volume `-v /opt/behemoth/data:/app/data` — survives restarts and redeploys.
-No RDS in staging. Add RDS only for prod with real money and multi-process access.
+SQLite at `/app/data/behemoth.db` inside the `behemoth` container. Docker named volume `behemoth_data` persists across `up -d` restarts. No RDS in staging.
 
-## Secrets — SSM Parameter Store
+## Secrets — SSM Parameter Store (eu-west-1)
 
-All `SecureString` encrypted with AWS-managed `aws/ssm` key (cannot be deleted or disabled).
+All `SecureString`, AWS-managed `aws/ssm` key.
 
 | Parameter | Who fills |
 |-----------|----------|
 | `behemoth.staging.binance.apiKey` | Manual |
 | `behemoth.staging.binance.secret` | Manual |
 | `behemoth.staging.binance.privateKey` | Manual (Ed25519, for prod) |
-| `behemoth.staging.slack.webhookUrl` | Manual |
+| `behemoth.staging.slack.webhookUrl` | Manual (deprecated, kept for backcompat) |
 
 ## IAM
 
-Role `behemoth-staging-ec2`:
-- `ssm:GetParameter` on `behemoth.staging.*` only
-- `kms:Decrypt` on `aws/ssm` (AWS-managed)
-- `logs:PutLogEvents` on `/behemoth/staging/*`
-- Account ID resolved dynamically via `data.aws_caller_identity` — not hardcoded
+IAM user `sergio-admin` access keys live in `/opt/apps/eccensia/.env` on the VPS. Scope is broader than ideal — replace with a tight `ssm:GetParameter` user when revisiting. The previous EC2 instance-profile role (`behemoth-staging-ec2`) was destroyed with the EC2.
 
-## Tags (all resources)
+OIDC role `behemoth-github-actions-terraform` still exists for Terraform applies via GitHub Actions.
+
+## Tags (all AWS resources)
 
 | Tag | Value |
 |-----|-------|
 | `project` | `auto-trading` |
-| `env` | `staging` (injected via `TF_VAR_env`, dynamic per environment) |
+| `env` | `staging` |
 | `client` | `myself` |
 | `managed_by` | `terraform` |
 
@@ -67,23 +55,17 @@ Role `behemoth-staging-ec2`:
 
 | Resource | Cost |
 |----------|------|
-| EC2 t3.micro on-demand | ~$8.50/mo |
-| EIP (attached to running instance) | $0 |
-| SSM, CloudWatch, S3 state | ~$0.50/mo |
-| **Total (running)** | **~$9/mo** |
-| **Total (stopped)** | **~$0.50/mo** |
-
-Use `python scripts/manage.py auto-trading staging off` to stop EC2 when not in use.
+| Hetzner CPX11 | ~$7/mo |
+| SSM + S3 state | ~$1/mo |
+| **Total** | **~$8/mo** |
 
 ## Key Decisions
 
 | Decision | Why |
 |----------|-----|
-| Default VPC | No benefit for single-instance setup. Saves 5+ resources. |
+| Hetzner over EC2 | $7 vs $8.50, 2GB RAM vs 1GB, no Binance geo-block on DE. |
 | SQLite over RDS | $0 vs $15/mo. Single-process bot. Add RDS for prod. |
 | SSM over Secrets Manager | Free vs $0.40/secret/mo. |
-| On-demand over reserved | No upfront commitment at this stage. |
 | AWS-managed KMS only | Cannot be accidentally deleted. |
-| Docker not PM2 | Portable, reproducible, single deploy artifact. |
-| OIDC for GH Actions | No stored AWS keys. Credentials live 15 min per job. |
-| `data.aws_caller_identity` in IAM | No hardcoded account ID in public repo. |
+| Docker Compose, no orchestrator | Single-host, no need for ECS/k8s. |
+| OIDC for GH Actions (Terraform) | No stored AWS keys for infra applies. |

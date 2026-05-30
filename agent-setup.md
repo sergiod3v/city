@@ -337,17 +337,17 @@ Before recommending from memory: verify the named file/function/flag still exist
 - **Reports:** 5x/day at 06, 10, 14, 18, 22 UTC
 - **No live trading:** `_has_open_position` stubbed False
 
-### Old AWS infra (likely retiring → Hetzner)
-- EC2 `i-014fe1d0bf52bda2c`, t3.micro, eu-west-1
-- EIP `34.251.157.224`
-- SSH alias `eccensia-aws` → `id_ed25519_alejocc`
-- Docker volume `behemoth_data:/app/data` → SQLite at `/app/data/behemoth.db`
-- Compose at `/opt/eccensia/docker-compose.yml`
-- Systemd `/etc/systemd/system/behemoth.{service,timer}` every 15 min
-- GHCR `ghcr.io/sergiod3v/auto-trading:latest`
-- CI: merge master → Docker build → push GHCR → SSH deploy (city repo reusable workflow)
+### Current infra (Hetzner VPS)
+- Hetzner CPX11, Ubuntu 24.04. SSH alias `hetzner` (`scripts/mac.sh` provisions it).
+- Stack at `/opt/apps/eccensia/` (source of truth: `city/config/eccensia/`).
+- Services: `nginx` + `eccensia` (Vite SPA) + `behemoth` (trading bot). Mercadillo/Postgres not deployed.
+- Docker volume `behemoth_data:/app/data` → SQLite at `/app/data/behemoth.db`.
+- Behemoth schedule: container runs continuously (loop inside `main.py`), not systemd-timer driven anymore.
+- GHCR `ghcr.io/sergiod3v/auto-trading:latest` + `ghcr.io/sergiod3v/eccensia:latest`.
+- CI builds + pushes only — deploy is manual `docker compose pull && up -d` on host. See `docs/deployment.md`.
+- AWS EC2 retired in commit `6924ea1` (chore/vps-migration/trading-teardown).
 
-### Secrets (SSM eu-west-1)
+### Secrets (SSM eu-west-1, read by Behemoth via AWS creds in `/opt/apps/eccensia/.env`)
 - `behemoth.staging.binance.apiKey` ✅
 - `behemoth.staging.binance.secret` ✅
 - `behemoth.staging.slack.webhookUrl` placeholder (no Slack)
@@ -361,11 +361,8 @@ OHLCV (Binance REST) ✅ · ATR/EMA ✅ · Fear & Greed (alternative.me) ✅ · 
 - **12:** RSS + LLM catalyst scraper
 - **13:** Postgres migration (trigger: >5 symbols)
 
-### Costs (current AWS)
-EC2 ~$8.50/mo · S3/SSM/CW ~$1/mo · **total ~$9/mo staging**
-
-### Migration consideration
-This VPS (Hetzner CPX11 $7/mo, 2GB) can replace the EC2. Trade: $8.50 AWS → $7 Hetzner, gain RAM (2GB vs t3.micro 1GB), lose AWS-native SSM/CW. SSM secrets → env vars or HashiCorp Vault-style. Discuss with Alejo before migrating.
+### Costs
+Hetzner CPX11 ~$7/mo · S3/SSM ~$1/mo · **total ~$8/mo**. EC2 + CW removed in trading-teardown.
 
 ---
 
@@ -394,7 +391,7 @@ If working inside a subdir, check for local `CLAUDE.md` — extends/overrides gl
 - **Cloudflare D1/KV/R2:** edge data (skip Postgres for web apps)
 - **SQLite:** Behemoth state (no Postgres daemon)
 - **GitHub:** code + private repos via registered SSH key
-- **Old AWS:** legacy EC2 still running Behemoth — pending migration decision
+- **AWS:** SSM Parameter Store + S3 (Terraform state) only — EC2 retired in trading-teardown
 
 ### Don't suggest
 - AWS (migrating off; Hetzner replaces EC2, Cloudflare replaces S3/Route53)

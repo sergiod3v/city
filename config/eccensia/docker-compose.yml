@@ -1,18 +1,13 @@
-# ECCENSIA unified stack — all services on single EC2
-# Location on EC2: /opt/eccensia/docker-compose.yml
+# ECCENSIA stack — Hetzner VPS (CPX11, Ubuntu 24.04)
+# Location on host: /opt/apps/eccensia/docker-compose.yml
+# Reads secrets from sibling .env file (see .env.example).
 
 networks:
   net_proxy:
-  net_mercadillo:
   net_behemoth:
 
 volumes:
-  postgres_data:
   behemoth_data:
-
-secrets:
-  db_password:
-    file: ./secrets/db_password.txt
 
 services:
   nginx:
@@ -25,46 +20,8 @@ services:
       - ./nginx/certs:/etc/letsencrypt:ro
       - ./nginx/webroot:/var/www/certbot:ro
     depends_on:
-      - mercadillo-front
       - eccensia
     networks: [net_proxy]
-    restart: unless-stopped
-
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - ./nginx/certs:/etc/letsencrypt
-      - ./nginx/webroot:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-    networks: [net_proxy]
-    restart: unless-stopped
-
-  mercadillo-front:
-    image: ghcr.io/sergiod3v/mercadillo:latest
-    expose:
-      - "3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - HOSTNAME=0.0.0.0
-      - AWS_REGION=eu-west-1
-      - DATABASE_URL=postgresql://mercadillo_app@mercadillo-db:5432/mercadillo
-    depends_on:
-      - mercadillo-db
-    networks: [net_proxy, net_mercadillo]
-    restart: unless-stopped
-
-  mercadillo-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: mercadillo
-      POSTGRES_USER: mercadillo_app
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    secrets:
-      - db_password
-    networks: [net_mercadillo]
     restart: unless-stopped
 
   eccensia:
@@ -80,9 +37,11 @@ services:
       - behemoth_data:/app/data
     environment:
       - AWS_REGION=eu-west-1
-      - BEHEMOTH_PAPER_MODE=true
-      - BEHEMOTH_MARKET_TYPE=spot
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - BEHEMOTH_SSM_ENV=staging
       - BEHEMOTH_SYMBOLS=BTC/USDT
-      - BEHEMOTH_INTERVAL=1h
+      - BEHEMOTH_INTERVAL=1d
+      - BEHEMOTH_EXCHANGE=okx
     networks: [net_behemoth]
     restart: unless-stopped

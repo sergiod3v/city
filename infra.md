@@ -1,129 +1,90 @@
 # ECCENSIA Infra Control
 
-Single EC2 (eu-west-1, EIP `34.251.157.224`) running all services via Docker Compose at `/opt/eccensia/`.
+Single Hetzner VPS (`hetzner`, CPX11, Ubuntu 24.04) running all services via Docker Compose at `/opt/apps/eccensia/`.
 
-## Prerequisites
-
-Aliases live in `~/.bashrc`. Source after changes: `source ~/.bashrc`
-
----
-
-## EC2 Lifecycle
-
-| Command | Action |
-|---------|--------|
-| `ec2-up` | Start EC2, wait until running, print IP |
-| `ec2-down` | Stop EC2 (EIP + Binance whitelist preserved) |
-| `ec2-status` | Show state, EIP, launch time, service list |
-
-Cost: ~$0.012/hr running · ~$0.005/hr stopped (EIP charge only)
-
-Backed by `city/infra.sh` — resolves instance via tag `Name=behemoth-staging-bot`, no hardcoded ID.
-
----
+AWS EC2 was retired in the trading-teardown migration. Behemoth + Eccensia frontend now run on the Hetzner box; Binance access works directly (no geo-block on Hetzner DE).
 
 ## SSH
 
 ```bash
-ssh eccensia          # via ~/.ssh/config alias
-ec2-ssh               # same, bashrc alias
+ssh hetzner          # via ~/.ssh/config alias (see scripts/mac.sh)
 ```
 
-Config (`~/.ssh/config`):
+`~/.ssh/config` entry (created by `scripts/mac.sh`):
 ```
-Host eccensia
-    HostName 34.251.157.224
-    User ec2-user
-    IdentityFile ~/.ssh/id_ed25519_alejocc
+Host hetzner
+    HostName <vps-ip>
+    User alejo
+    IdentityFile ~/.ssh/hetzner_main
     IdentitiesOnly yes
 ```
 
----
+## Service Control
 
-## Service Control (independent of EC2 lifecycle)
-
-All commands run `docker compose` on EC2 at `/opt/eccensia/`.
-
-### Generic functions
+All commands run `docker compose` on the host in `/opt/apps/eccensia/`.
 
 ```bash
-svc-up <service>              # docker compose up -d <service>
-svc-down <service>            # docker compose stop <service>
-svc-restart <service>         # docker compose restart <service>
-svc-pull <service>            # pull latest image + redeploy
-svc-logs <service> [lines]    # follow logs (default: last 50 lines)
-svc-status                    # docker compose ps
+ssh hetzner
+cd /opt/apps/eccensia
+
+docker compose ps                       # status
+docker compose pull <service>           # latest image
+docker compose up -d <service>          # apply
+docker compose restart <service>
+docker compose logs --tail 50 -f <service>
 ```
-
-### Per-service quick aliases
-
-| Alias | Equivalent |
-|-------|-----------|
-| `behemoth-restart` | `svc-restart behemoth` |
-| `behemoth-logs` | `svc-logs behemoth` |
-| `eccensia-restart` | `svc-restart eccensia` |
-| `eccensia-logs` | `svc-logs eccensia` |
-| `mercadillo-restart` | `svc-restart mercadillo-front` |
-| `mercadillo-logs` | `svc-logs mercadillo-front` |
-| `nginx-restart` | `svc-restart nginx` |
-| `nginx-logs` | `svc-logs nginx` |
 
 ### Services
 
-| Name | Description | Port |
-|------|-------------|------|
-| `behemoth` | Trading bot | — |
-| `eccensia` | Vite SPA | :80 (via nginx) |
-| `mercadillo-front` | Next.js storefront | :3000 (via nginx) |
-| `mercadillo-db` | PostgreSQL | :5432 |
-| `nginx` | Reverse proxy + SSL termination | :80/:443 |
+| Name | Image | Notes |
+|------|-------|-------|
+| `nginx` | `nginx:alpine` | Reverse proxy, HTTP only (TLS deferred) |
+| `eccensia` | `ghcr.io/sergiod3v/eccensia:latest` | Vite SPA |
+| `behemoth` | `ghcr.io/sergiod3v/auto-trading:latest` | Trading bot, reads SSM via AWS creds in `.env` |
 
----
+Mercadillo (Next.js + Postgres) is not deployed on this host — slated for Cloudflare/separate stack.
 
-## First-Deploy Bootstrap (one-time)
+## First-Deploy Bootstrap
 
-```bash
-ssh eccensia
-
-# Create secrets
-sudo mkdir -p /opt/eccensia/secrets
-echo "your_db_password" | sudo tee /opt/eccensia/secrets/db_password.txt
-sudo chmod 600 /opt/eccensia/secrets/db_password.txt
-
-# Copy compose config from city repo
-scp -r city/config/eccensia/ ec2-user@34.251.157.224:/opt/eccensia/
-
-# Authenticate to GHCR
-echo $GHCR_PAT | docker login ghcr.io -u sergiod3v --password-stdin
-
-# Start all services
-cd /opt/eccensia && docker compose up -d
-```
-
----
-
-## SSL (certbot, one-time per domain)
+See `config/eccensia/README.md`. Summary:
 
 ```bash
-svc-up certbot  # or run manually:
-ssh eccensia "docker compose -f /opt/eccensia/docker-compose.yml run --rm certbot \
-  certonly --webroot --webroot-path=/var/www/certbot \
-  -d eccensia.com -d www.eccensia.com \
-  -d eccensia.sergiod3v.cloud \
-  -d mercadillo.bijadillo.com -d bijadillo.com \
-  --email sergioa.camachoc@gmail.com --agree-tos --no-eff-email"
+ssh hetzner
+sudo mkdir -p /opt/apps/eccensia && sudo chown -R "$USER":"$USER" /opt/apps/eccensia
+git clone git@github.com:sergiod3v/city.git ~/city
+rsync -a ~/city/config/eccensia/ /opt/apps/eccensia/
+
+cd /opt/apps/eccensia
+cp .env.example .env && $EDITOR .env
+
+echo "$GHCR_PAT" | docker login ghcr.io -u sergiod3v --password-stdin
+docker compose pull && docker compose up -d
 ```
 
-DNS A records required before issuance:
-- `eccensia.com` + `www` → `34.251.157.224`
-- `eccensia.sergiod3v.cloud` → `34.251.157.224`
+## Image Build → Deploy Flow
 
----
+1. Push to `master` on `auto-trading` or `eccensia` → GitHub Actions builds + pushes `:latest` to GHCR.
+2. No auto-pull on the host. Manual `docker compose pull <svc> && docker compose up -d <svc>` to apply.
+
+## Config Changes
+
+Compose file + nginx config + `.env.example` live in `city/config/eccensia/`. Workflow:
+
+```bash
+# Local
+$EDITOR city/config/eccensia/...
+git commit && git push
+
+# On host
+cd ~/city && git pull
+rsync -a ~/city/config/eccensia/ /opt/apps/eccensia/ --exclude .env
+cd /opt/apps/eccensia && docker compose up -d
+```
 
 ## Git / Infra Change Policy
 
-- **Never push to master directly.** Branch → PR → plan passes → merge → apply.
-- Never commit `.tfvars` with real values (use `.tfvars.example`).
+- **Never push to master directly** for Terraform changes — branch → PR → plan → merge → apply.
+- Never commit `.tfvars` with real values (use `.tfvars.example`). Never commit `.env`.
 - Never commit `.terraform/` directories.
 - State backend: S3 (never local).
-- Tag every resource: `Project`, `Environment`, `Owner`, `ManagedBy=terraform`.
+- Tag every AWS resource: `Project`, `Environment`, `Owner`, `ManagedBy=terraform`.
